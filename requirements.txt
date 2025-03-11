@@ -1,0 +1,14 @@
+
+---
+
+### **Requirements.txt**  
+
+```text
+numpy
+pandas
+matplotlib
+scipy
+torch
+torchvision
+torchaudio
+sklearn
