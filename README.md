@@ -8,7 +8,7 @@ The models are evaluated using **data from the Italian IPEX Nord bidding zone** 
 ---
 
 ## 📂 Repository Structure  
-
+```plaintext
 📦 Forecasting_Project
 │-- 📂 src/                         # Contains all the core scripts
 │   ├── 📂 data/                        # Stores raw and processed data files
@@ -26,4 +26,4 @@ The models are evaluated using **data from the Italian IPEX Nord bidding zone** 
 │   ├── main.py                          # Main script to run forecasting
 │-- README.md                       # Project documentation
 │-- requirements.txt                 # Dependencies required to run the project
-
+```
