@@ -1,0 +1,263 @@
+import time
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from scipy.optimize import differential_evolution
+from sklearn.metrics import mean_squared_error
+
+# Import utility functions and preprocessing functions
+from src.utilities import metric, reconstruct_sup, model_1  # model_1 is used for LR forecasts
+from src.preprocess import load_data, handle_missing_values, generate_weekend_monday_vector
+
+# Define a neural network for forecasting L (supply curves)
+class SimpleNN(nn.Module):
+    def __init__(self):
+        super(SimpleNN, self).__init__()
+        # The input dimension is 200 (from the interpolated grid)
+        # and the output dimension is 200 (forecasting a 200-element curve)
+        self.fc1 = nn.Linear(200, 164)
+        self.fc3 = nn.Linear(164, 200)
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = self.fc3(x)
+        return x
+
+def model_2(L, num_epochs=100, batch_size=32, hidden_size=32):
+    """
+    Trains a neural network model for forecasting the interpolated supply curves L.
+    
+    Parameters:
+      - L (numpy array): Interpolated supply curve data with shape (n_samples, 200).
+      - num_epochs (int): Number of training epochs.
+      - batch_size (int): Batch size for training.
+      - hidden_size (int): Not used here since our network is fixed, but kept for consistency.
+      
+    Returns:
+      - Y_valid (numpy array): Forecasts for the validation set.
+      - Y_test (numpy array): Forecasts for the test set.
+    """
+    # Split L into train and test parts (last 173 samples for test)
+    train = L[:-172]
+    test = L[-173:]
+    split = int(0.7 * len(train))
+    valid = train[split-1:]
+    train = train[:split]
+
+    # Prepare input-output pairs: forecasting next point from the current
+    x_train = train[:-1]
+    y_train = train[1:]
+    
+    x_valid = valid[:-1]
+    y_valid = valid[1:]
+    
+    x_test = test[:-1]
+    y_test = test[1:]
+    
+    # Convert to PyTorch tensors
+    X_train_tensor = torch.tensor(x_train, dtype=torch.float32)
+    y_train_tensor = torch.tensor(y_train, dtype=torch.float32)
+    X_valid_tensor = torch.tensor(x_valid, dtype=torch.float32)
+    X_test_tensor = torch.tensor(x_test, dtype=torch.float32)
+    
+    # Initialize model, loss function, and optimizer
+    model = SimpleNN()
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters())
+    
+    # Training loop
+    for epoch in range(num_epochs):
+        for i in range(0, len(X_train_tensor), batch_size):
+            inputs = X_train_tensor[i:i+batch_size]
+            targets = y_train_tensor[i:i+batch_size]
+            
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+    
+    # Evaluate on validation and test sets
+    model.eval()
+    with torch.no_grad():
+        outputs_valid = model(X_valid_tensor)
+        outputs_test = model(X_test_tensor)
+    
+    Y_valid = outputs_valid.numpy()
+    Y_test = outputs_test.numpy()
+    return Y_valid, Y_test
+
+def train_supply_model(supply_price, supply_volume, public_holidays, vector):
+    """
+    Trains a supply forecasting model for each hour of the day using multiple techniques.
+    
+    It:
+      1. Extracts hourly supply curves.
+      2. Interpolates each supply curve to create L (an array of fixed length 200).
+      3. Uses model_2 (MLP/Neural Network) to forecast L.
+      4. Obtains additional forecasts using a linear model (model_1).
+      5. Uses differential evolution to optimize a combined forecast.
+      
+    Parameters:
+      - supply_price (numpy array): Supply price data.
+      - supply_volume (numpy array): Supply volume data.
+      - public_holidays (numpy array): Holiday indicator data.
+      - vector (numpy array): Indicator vector for weekends/Mondays.
+      
+    Returns:
+      - results (dict): Contains forecasts and loss metrics for each hour.
+    """
+    results = {
+        "naive_predv_h": [],
+        "naive_predp_h": [],
+        "sm_predv_h": [],
+        "sm_predp_h": [],
+        "lr_predv_h": [],
+        "lr_predp_h": [],
+        "combined_predv_h_t2": [],
+        "combined_predp_h_t2": []
+    }
+    
+    for h in range(24):
+        print(f"Processing Hour {h+1}...")
+        # Extract hourly data for supply curves
+        supp = supply_price[np.arange(h, len(supply_price), 24)]
+        supv = supply_volume[np.arange(h, len(supply_price), 24)]
+        
+        # Pre-process: For each supply curve, ensure values for 3000 are singular
+        for i in range(len(supv)):
+            idx = np.where(supp[i] == 3000)[0]
+            if idx.size > 0:
+                supv[i][supp[i] == 3000] = [supv[i][idx[0]]]
+                supp[i][supp[i] == 3000] = [supp[i][idx[0]]]
+        
+        # Extract endpoints for supply curves
+        sup_B = np.array([supv[i][0] for i in range(len(supv))])
+        sup_M = np.array([supv[i][supp[i] < 3000][-1] for i in range(len(supp))])
+        sup_E = np.array([supv[i][supp[i] == 3000][0] for i in range(len(supp))])
+        
+        # Obtain linear model forecasts using model_1 (for LR)
+        sup_B_lr_val_train, sup_B_lr_val_test = model_1(sup_B)[0][7:], model_1(sup_B)[-1]
+        sup_M_lr_val_train, sup_M_lr_val_test = model_1(sup_M)[0][7:], model_1(sup_M)[-1]
+        sup_E_lr_val_train, sup_E_lr_val_test = model_1(sup_E)[0][7:], model_1(sup_E)[-1]
+        
+        # Smarter Naive predictions for supply curves
+        split = 7
+        sm_sup_B, sm_sup_M, sm_sup_E = [], [], []
+        sm_predv, sm_predp = [], []
+        testv = supv[split:]
+        testp = supp[split:]
+        j = split
+        for i in range(len(testv)):
+            # For supply curves, we use previous hour's data or 7-hour lag based on vector indicator
+            if vector[i+split] == 0:
+                sm_sup_B.append(supv[j - 1][0])
+                sm_sup_M.append(supv[j - 1][supp[j - 1] < 3000][-1])
+                sm_sup_E.append(supv[j - 1][supp[j - 1] == 3000][0])
+                sm_predv.append(supv[j - 1])
+                sm_predp.append(supp[j - 1])
+            else:
+                sm_sup_B.append(supv[j - 7][0])
+                sm_sup_M.append(supv[j - 7][supp[j - 7] < 3000][-1])
+                sm_sup_E.append(supv[j - 7][supp[j - 7] == 3000][0])
+                sm_predv.append(supv[j - 7])
+                sm_predp.append(supp[j - 7])
+            j += 1
+        
+        sm_sup_B = np.array(sm_sup_B)
+        sm_sup_M = np.array(sm_sup_M)
+        sm_sup_E = np.array(sm_sup_E)
+        sup_B_sm_val_test = sm_sup_B[-172:]
+        sup_M_sm_val_test = sm_sup_M[-172:]
+        sup_E_sm_val_test = sm_sup_E[-172:]
+        
+        # Construct interpolated curves L from each supply curve
+        # Here, we interpolate the portion where supply < 3000 (the active region)
+        L = []
+        for i in range(len(supp)):
+            tp = supp[i][supp[i] < 3000]
+            tv = supv[i][supp[i] < 3000]
+            # Ensure tv has at least 2 points to interpolate
+            if len(tv) >= 2:
+                grid = np.linspace(tv[0], tv[-1], num=200)
+                L.append(np.interp(grid, tv, tp))
+            else:
+                # If not enough points, fill with zeros
+                L.append(np.zeros(200))
+        L = np.array(L)
+        
+        # Forecast the supply curves using the neural network model (MLP) for supply data
+        Y_valid, Y_test = model_2(L)
+        
+        # For optimization, further split data if necessary.
+        # For example, create validation set for combined forecasting
+        # (Assuming valv and valp are the portions of supv and supp corresponding to validation)
+        # Here we define:
+        valv = supv[-len(sup_B_lr_val_train)-172:-172]
+        valp = supp[-len(sup_B_lr_val_train)-172:-172]
+        
+        # Define the objective function for differential evolution optimization
+        def objective(n):
+            sup_B_h = n[0] * sup_B_sm_val_test + n[1] * sup_B_lr_val_train + n[2]
+            sup_M_h = n[0] * sup_M_sm_val_test + n[1] * sup_M_lr_val_train + n[3]
+            sup_E_h = n[0] * sup_E_sm_val_test + n[1] * sup_E_lr_val_train + n[4]
+    
+            comb_loss = []
+            # Use the validation forecast (Y_valid) from model_2 for combined evaluation.
+            # Note: Adjust indexing if necessary.
+            for i in range(len(valv)):
+                pred = reconstruct_sup(sup_B_h[i], sup_M_h[i], sup_E_h[i], Y_valid[7:][i])
+                comb_loss.append(metric(valv[i], valp[i], pred[0], pred[1]))
+            return np.mean(comb_loss)
+    
+        bounds = [(0, 1), (0, 1), (-1000, 1000), (-1000, 1000), (-1000, 1000)]
+        result = differential_evolution(objective, bounds, popsize=100, maxiter=10, mutation=(0.5, 1.0), strategy='best1bin')
+        optimized_params = result.x
+        print(f"Optimized Parameters for Hour {h+1}: {optimized_params}")
+    
+        # Compute final combined predictions on the test set
+        sup_B_h_final = optimized_params[0] * sup_B_sm_val_test[12:] + optimized_params[1] * sup_B_lr_val_test[12:] + optimized_params[2]
+        sup_M_h_final = optimized_params[0] * sup_M_sm_val_test[12:] + optimized_params[1] * sup_M_lr_val_test[12:] + optimized_params[3]
+        sup_E_h_final = optimized_params[0] * sup_E_sm_val_test[12:] + optimized_params[1] * sup_E_lr_val_test[12:] + optimized_params[4]
+    
+        predictionv = []
+        predictionp = []
+        comb_loss = []
+        for i in range(len(supv[-172:]) - 12):
+            sup_B_t = sup_B_h_final[i]
+            sup_M_t = sup_M_h_final[i]
+            sup_E_t = sup_E_h_final[i]
+    
+            curve = Y_test[12:][i]
+            pred = reconstruct_sup(sup_B_t, sup_M_t, sup_E_t, curve)
+            predictionv.append(pred[0])
+            predictionp.append(pred[1])
+            comb_loss.append(metric(supv[-172:][i+12], supp[-172:][i+12], pred[0], pred[1]))
+    
+        rmse_combined = np.mean(comb_loss)
+        print(f"Combined Model Loss for Hour {h+1}: {rmse_combined}")
+    
+        # Store results for this hour
+        results["naive_predv_h"].append(supv[-161:-1])
+        results["naive_predp_h"].append(supp[-161:-1])
+        results["sm_predv_h"].append(np.array(sm_predv)[-160:])
+        results["sm_predp_h"].append(np.array(sm_predp)[-160:])
+        results["lr_predv_h"].append(sup_B_lr_val_test)
+        results["lr_predp_h"].append(sup_M_lr_val_test)
+        results["combined_predv_h_t2"].append(predictionv)
+        results["combined_predp_h_t2"].append(predictionp)
+    
+    return results
+
+
+if __name__ == "__main__":
+    # Load data
+    public_holidays, public_holidays_2, demand_price, demand_volume, supply_price, supply_volume = load_data()
+    demand_price, demand_volume, supply_price, supply_volume = handle_missing_values(demand_price, demand_volume, supply_price, supply_volume)
+    vector = generate_weekend_monday_vector()
+    
+    # Train the supply model
+    results = train_supply_model(supply_price, supply_volume, public_holidays, vector)
+    print("✅ Supply Model Training Completed")

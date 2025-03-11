@@ -1,0 +1,78 @@
+def metric(x1, y1, x2, y2):
+    """
+    MC-RMSE metric
+    """
+    temp = np.sort(np.unique(np.union1d(x1,x2)))
+    v = np.linspace(temp[0],temp[-1],10000)
+
+    c1 = np.interp(v,x1,y1)
+    c2 = np.interp(v,x2,y2)
+    area = np.sqrt(np.mean((c1 - c2)**2))
+
+    return area
+
+def reconstruct(P, Q, K, curve):
+    """
+    Reconstruction for demand curves
+    """
+    v = np.hstack((0,P,np.linspace(Q,K,len(curve))))
+    p = np.hstack((3000,3000,curve))
+    recon_curve = np.vstack((v,p))
+    return recon_curve
+
+def reconstruct_sup(P, Q, K, curve):
+    """
+    Reconstruction for supply curves
+    """
+    v = np.hstack((np.linspace(P,Q,len(curve)),K, K + 200))
+    p = np.hstack((curve,3000,3000))
+    recon_curve = np.vstack((v,p))
+    return recon_curve
+
+def model_1(P):
+    """
+    Linear model containing holiday information
+    """
+    P_x = P[6:-1].reshape(len(P[6:-1]),1)
+    P_x_7 = ((P[0:-7])).reshape(len(P[0:-7]),1) ## this is correct
+    P_y = P[7:].reshape(len(P[7:]),1) # this is correct
+    P_x_h = public_holidays[7:].reshape(len(P[7:]),1)
+    bias = np.ones((len(P_x),1))
+
+    
+    P_covariate = np.hstack((P_x, P_x_7))
+    P_covariate = np.hstack((P_covariate, P_x_h))
+    P_covariate = np.hstack((P_covariate, bias))
+    P_target = P_y
+    
+    x_train = P_covariate[:-172,:]
+    x_test = P_covariate[-172:,:]
+    split = int(0.696*len(x_train))
+    x_valid = x_train[split:]
+    x_train = x_train[:split]
+    
+    y_train = P_target[:-172,:]
+    y_test = P_target[-172:,:]
+    split = int(0.696*len(y_train))
+    y_valid = y_train[split:]
+    y_train = y_train[:split]
+
+  
+    
+    mini = 99999999999
+    min_alpha = 0
+    for i in np.linspace(1, 200, 1000):
+        lasso = Lasso(alpha=i)  # Set the regularization strength (alpha)
+        lasso.fit(x_train, y_train)
+        y_pred = lasso.predict(x_valid)
+        if np.sqrt(mean_squared_error(y_valid, y_pred)) < mini:
+            mini = np.sqrt(mean_squared_error(y_valid, y_pred))
+            min_alpha = i
+    
+    lasso = Lasso(alpha=min_alpha)  # Set the regularization strength (alpha)
+    lasso.fit(x_train, y_train)
+    P_lr = np.hstack((lasso.predict(x_train),lasso.predict(x_valid)))
+    P_lr = np.hstack((P_lr,lasso.predict(x_test)))
+                     
+    P_pred_lr = lasso.predict(x_test)
+    return lasso.predict(x_valid),y_test,P_pred_lr
