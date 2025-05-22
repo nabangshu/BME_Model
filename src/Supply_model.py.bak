@@ -340,17 +340,12 @@ def train_supply_model(supply_price, supply_volume, public_holidays, vector):
             comb_loss.append(metric(testv[i+12],testp[i+12],pred[0],pred[1]))
         rmse2 = np.mean(comb_loss)
         print('Combined Variant loss for hour ' + str(h+1) + ': ' + str(rmse2))
-
-        
-        sup_combined_predv_h_t2.append(predictionv)
-        sup_combined_predp_h_t2.append(predictionp)
-
     
         # Store results for this hour
         results["naive_predv_h"].append(supv[-161:-1])
         results["naive_predp_h"].append(supp[-161:-1])
-        results["sm_predv_h"].append(np.array(sm_predv)[-160:])
-        results["sm_predp_h"].append(np.array(sm_predp)[-160:])
+        results["sm_predv_h"].append(sm_predv[-160:])
+        results["sm_predp_h"].append(sm_predp[-160:])
         results["lr_predv_h"].append(sup_B_lr_val_test)
         results["lr_predp_h"].append(sup_M_lr_val_test)
         results["combined_predv_h_t2"].append(predictionv)

@@ -362,4 +362,4 @@ if __name__ == "__main__":
     
     # Train the supply model
     results = train_supply_model(supply_price, supply_volume, public_holidays, vector)
-    print("✅ Supply Model Training Completed")
+    print("✅ Supply Results Completed")

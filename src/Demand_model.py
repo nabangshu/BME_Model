@@ -299,4 +299,4 @@ if __name__ == "__main__":
     # Train the demand model
     demand_results = train_demand_model(demand_price, demand_volume, public_holidays, vector)
     
-    print("✅ Demand Model Training Completed")
+    print("✅ Demand Results Completed")

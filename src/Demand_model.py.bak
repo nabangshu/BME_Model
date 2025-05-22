@@ -280,7 +280,7 @@ def train_demand_model(demand_price, demand_volume, public_holidays, vector):
         results["smarter_naive_pred_price"].append(sm_predp[-160:])
         results["linear_pred_volume"].append(lr_predv[-160:])
         results["linear_pred_price"].append(lr_predp[-160:])
-        results["rmse_combined"].append(rmse_combined)
+        results["rmse_combined"].append(rmse)
 
     return results
 

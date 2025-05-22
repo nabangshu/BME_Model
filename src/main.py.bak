@@ -1,4 +1,4 @@
-from preprocess import load_data, handle_missing_values
+from preprocess import load_data, handle_missing_values, generate_weekend_monday_vector
 from Demand_model import train_demand_model
 from Supply_model import train_supply_model
 from visualize_demand import plot_demand_forecast
@@ -11,10 +11,10 @@ if __name__ == "__main__":
     vector = generate_weekend_monday_vector()
     # Train demand and supply models
     demand_results = train_demand_model(demand_price, demand_volume, public_holidays, vector)
-    print("✅ Demand Model Training Completed")
+    print("✅ Demand Results Completed")
 
     supply_results = train_supply_model(supply_price, supply_volume, public_holidays, vector)
-    print("✅ Supply Model Training Completed")
+    print("✅ Supply Results Completed")
 
     # Visualize results
     plot_demand_forecast(demand_price, demand_volume, **demand_results)
