@@ -31,23 +31,10 @@ https://colab.research.google.com/github/nabangshu/BME_Model/blob/main/BME_Model
 
     *(Make sure to have `pip` installed and upgraded.)*
 
-3. **Run the Code**
 
-    Run the main script (`main.py`) to generate results and plots:
+3. **Outputs**
 
-    - **Mac/Linux:**
-	  ```bash
-	  python3 src/main.py
-		```
-		
-	- **Windows:**
-	  ```bash
-	  python3 src\main.py
-		```
-
-4. **Outputs**
-
-    After running `main.py` inside the src folder, you'll see generated results and plots in your terminal or as pop-up windows (depending on your plotting configuration).
+    The code for all the results and figures are present inside the notebook titled "BME_Model.ipynb". 
 
 ---
 
@@ -55,22 +42,23 @@ https://colab.research.google.com/github/nabangshu/BME_Model/blob/main/BME_Model
 
 ## 📂 Repository Structure  
 
-📦 Forecasting_Project
-│-- 📂 src/                         # Contains all the core scripts
 │   ├── 📂 data/                        # Stores raw and processed data files
 │	│   ├── total_demand_price_data.npy
 │	│   ├── total_demand_volume_data.npy
 │	│   ├── total_supply_price_data.npy
 │	│   ├── total_supply_volume_data.npy
 │	│   ├── holidays.npy
-│   ├── utilities.py                # Common helper functions
-│   ├── preprocess.py               # Data loading and preprocessing functions
-│   ├── demand_model.py             # Demand curve forecasting
-│   ├── supply_model.py             # Supply curve forecasting
-│   ├── visualize_demand.py         # Visualization of demand forecasts
-│   ├── visualize_supply.py         # Visualization of supply forecasts
-│   ├── main.py                     # Main script to run forecasting
-│-- BME_Model_Demo.ipynb        	# Jupyter Notebook for running everything to obtain the plots
+│   ├── 📂 Results/                        # Contains the results of both the pure variant and the combined variant
+│	│   ├── Demand_comb_p.npy
+│	│   ├── Demand_comb_v.npy
+│	│   ├── Demand_pure_p.npy
+│	│   ├── Demand_pure_v.npy
+│	│   ├── Supply_comb_p.npy
+│	│   ├── Supply_comb_v.npy
+│	│   ├── Supply_pure_p.npy
+│	│   ├── Supply_pure_v.npy
+│   ├── 📂 FAR_curves                        # Contains the results of the FAR model run on R
+│-- BME_Model.ipynb        	# Jupyter Notebook for running everything to obtain the plots
 │-- README.md                       # Project documentation
 │-- requirements.txt                # Dependencies required to run the project
 
