@@ -8,8 +8,8 @@ The models are evaluated using **data from the Italian IPEX Nord bidding zone** 
 ---
 # BME_Model Notebook
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](
-https://colab.research.google.com/github/nabangshu/BME_Model/blob/main/BME_Model_Demo.ipynb)
+Run the notebook in Google Colab. [![Open In Colab]([https://colab.research.google.com/assets/colab-badge.svg)]
+https://colab.research.google.com/github/nabangshu/BME_Model/blob/main/BME_Model.ipynb)
 
 ---
 ## Installation and Running Instructions
@@ -62,4 +62,5 @@ https://colab.research.google.com/github/nabangshu/BME_Model/blob/main/BME_Model
 │-- README.md                       # Project documentation
 │-- requirements.txt                # Dependencies required to run the project
 
+---
 
